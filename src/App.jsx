@@ -354,28 +354,36 @@ export default function App() {
   },[]);
 
   const addToCart=async(ingredients,recipeName)=>{
-    const ings=ingredients.map(parseIng);
-    const freshShopping=await DB.getShopping();setShopping(freshShopping);
-    const toUpdate=[],toAdd=[];
-    for(const ing of ings){
-      if(!ing.name.trim())continue;
-      const {qty:baseQty,unit:baseUnit}=toBase(Number(ing.qty)||0,ing.unit);
-      const normName=ing.name.trim().toLowerCase();
-      const existing=freshShopping.find(s=>s.name.trim().toLowerCase()===normName&&!s.checked);
-      if(existing){
-        const {qty:exBase,unit:exBaseUnit}=toBase(Number(existing.qty)||0,existing.unit);
-        if(exBaseUnit===baseUnit){const sumBase=exBase+baseQty;const {qty:fq,unit:fu}=fromBase(sumBase,baseUnit);toUpdate.push({id:existing.id,qty:fq,unit:fu});}
-      } else {
-        const {qty:dq,unit:du}=fromBase(baseQty,baseUnit);
-        toAdd.push({name:ing.name.trim(),qty:dq,unit:du,checked:false,from_recipe:recipeName});
-      }
-    }
     try {
+      const ings=ingredients.map(parseIng).filter(i=>i.name.trim());
+      if(ings.length===0){showToast("Esta receta no tiene ingredientes");return;}
+      const freshShopping=await DB.getShopping();
+      setShopping(freshShopping);
+      const toUpdate=[],toAdd=[];
+      for(const ing of ings){
+        const {qty:baseQty,unit:baseUnit}=toBase(Number(ing.qty)||0,ing.unit||"und");
+        const normName=ing.name.trim().toLowerCase();
+        const existing=freshShopping.find(s=>s.name&&s.name.trim().toLowerCase()===normName&&!s.checked);
+        if(existing){
+          const {qty:exBase,unit:exBaseUnit}=toBase(Number(existing.qty)||0,existing.unit||"und");
+          if(exBaseUnit===baseUnit){
+            const sumBase=exBase+baseQty;
+            const {qty:fq,unit:fu}=fromBase(sumBase,baseUnit);
+            toUpdate.push({id:existing.id,qty:fq,unit:fu});
+          }
+        } else {
+          const {qty:dq,unit:du}=fromBase(baseQty,baseUnit);
+          toAdd.push({name:ing.name.trim(),qty:dq,unit:du,checked:false,from_recipe:recipeName});
+        }
+      }
       for(const u of toUpdate)await DB.updateShoppingItem(u.id,{qty:u.qty,unit:u.unit});
       if(toAdd.length>0)await DB.addShoppingItems(toAdd);
       setShopping(await DB.getShopping());
       showToast(`🛒 ${toAdd.length} nuevos + ${toUpdate.length} actualizados`);
-    } catch{showToast("Error al agregar ingredientes");}
+    } catch(e){
+      console.error("addToCart error:",e);
+      showToast("Error al agregar ingredientes");
+    }
   };
 
   const handleAddToCalendar=async(date,slot,recipe)=>{
